@@ -1,0 +1,9 @@
+; $Id$
+name = Reading Room 
+description = Creates reading room ala http://aaroncouch.info/reading-room.
+dependencies[] = views
+dependencies[] = feeds
+dependencies[] = jquery_ui
+dependencies[] = jquery_update
+dependencies[] = popups
+core = 6.x

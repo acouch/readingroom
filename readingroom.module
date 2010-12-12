@@ -1,0 +1,374 @@
+<?php
+// Vocabulary being used for the different sections. Need to set this manually for now.
+define('READINGROOM_VOCAB_ID', 4);
+
+/**
+ * Implementation of hook_theme().
+ */
+function readingroom_theme() {
+  $items['readingroom_output'] = array(
+    'arguments' => array('element' => array()),
+  );
+  $items['readingroom_feed_link'] = array(
+    'arguments' => array('title' => array(), 'link' => array(), 'teaser' => array(), 'date' => array()),
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function readingroom_init() {
+  $path = drupal_get_path('module', 'readingroom');
+  drupal_add_css (
+    $path . '/css/jquery-ui.css'
+  );
+  drupal_add_css (
+    $path . '/css/readingroom.css'
+  );
+  jquery_ui_add('ui.tabs');
+  jquery_ui_add('ui.core');
+  jquery_ui_add('ui.accordion');
+  drupal_add_js(
+    $path . '/js/readingroom.js'
+  );
+}
+
+/**
+ * Get a list of feed items from feeds grabbed in readingroom_get_feeds().
+ * It would be better to grab a view that people can edit. 
+ */
+function readingroom_get_list($nid, $num = 5) {
+  $results = db_query('SELECT node.nid AS nid,
+   node.title AS node_title,
+   node_data_field_link_rss.field_link_rss_value AS link,
+   node.type AS node_type,
+   node.vid AS node_vid,
+   node.created AS node_created,
+   node_revisions.teaser as feed_teaser
+   FROM node node 
+   LEFT JOIN node_revisions node_revisions ON node.vid = node_revisions.vid
+   LEFT JOIN feeds_node_item feeds_node_item ON node.nid = feeds_node_item.nid
+   LEFT JOIN content_type_feed_item node_data_field_link_rss ON node.vid = node_data_field_link_rss.vid
+   WHERE (node.status <> 0) AND (feeds_node_item.feed_nid = %d)
+   ORDER BY node_created DESC LIMIT %d',$nid, $num);
+   $result=array();
+   while($list = db_fetch_object($results)) {
+     $date = $list->node_created;
+     $teaser = $list->feed_teaser;
+     $title = $list->node_title;
+     $link = $list->link;
+     $result[]= theme('readingroom_feed_link', $title, $link, $date, $teaser);   
+   }
+   $result = theme('item_list',$result);
+   return $result;
+}  
+
+/**
+ * Get feed info and the appropriate tab selected in the feed node. 
+ */
+function readingroom_get_feed_info($nid) {
+  $results=db_query('
+  SELECT node.nid AS nid,
+    node.title AS node_title,
+    term_data.name AS term_data_name,
+    term_data.vid AS term_data_vid,
+    term_data.tid AS term_data_tid,
+    feeds_source.source AS feeds_source,
+    node_data_field_number.field_number_value AS number,
+    node_data_field_image.field_image_fid AS image_fid,
+    node_data_field_image.nid AS node_data_field_image_nid,
+    files.filepath as filepath
+  FROM node node 
+  LEFT JOIN term_node term_node ON node.vid = term_node.vid
+  LEFT JOIN term_data term_data ON term_node.tid = term_data.tid
+  LEFT JOIN feeds_source feeds_source ON node.nid = feeds_source.feed_nid
+  LEFT JOIN content_field_image node_data_field_image ON node.vid = node_data_field_image.vid
+  LEFT JOIN content_type_feed node_data_field_number ON node.vid = node_data_field_number.vid
+  LEFT JOIN files files ON files.fid = node_data_field_image.field_image_fid
+  WHERE (node.type in ("feed")) AND (node.status <> 0) AND (node.nid = %d)
+   ',$nid);
+  $result=array();
+  while($feeds = db_fetch_object($results)) {
+    $result['nid']= $feeds->nid;
+    $result['title'] = $feeds->node_title;
+    $result['tab'] = $feeds->term_data_name;
+    $result['source'] = $feeds->feeds_source;
+    $result['number'] = $feeds->number;
+    $result['image_path'] = $feeds->filepath;
+    $i++;
+  }
+  return $result;
+}
+
+/**
+ * Get nids for all published feed nodes. 
+ */
+function readingroom_get_feed_nids() {
+  $results=db_query('
+    SELECT nid
+    FROM node 
+    WHERE (type = "feed") AND (status <> 0)
+   ');
+  $result=array();
+  while($feeds = db_fetch_object($results)) {
+    $result[]= $feeds->nid;
+  }
+  return $result;
+}
+
+/**
+ * Get nids for all published feed item nodes. 
+ */
+function readingroom_get_feed_item_nids($feed_nid) {
+  $results=db_query("
+    SELECT nid
+    FROM feeds_node_item
+    WHERE feed_nid = '%d'
+   ", $feed_nid);
+  while($feeds = db_fetch_object($results)) {
+    $result[$feed_nid][] = $feeds->nid;
+  }
+  return $result;
+}
+/**
+ * Implementation of hook_block.
+ */
+function readingroom_block($op = 'lists', $delta = 0) {
+  switch ($op) {
+    case 'list':
+      $blocks['readingroom']['info'] = 'AC Module Block';
+      return $blocks;
+    case 'view':
+      if($delta == 'readingroom') {
+        $blocks['subject'] = 'AC Module Block';
+        $blocks['content'] = readingroom_print_feeds();
+      }
+    return $blocks;
+  }
+}
+
+/**
+ * Get taxonomy terms which are the tabs
+ */
+function readingroom_get_tabs($term_id) {
+  $results=db_query('
+  SELECT term_data.tid AS tid,
+    term_data.name AS name,
+    term_data.vid AS vid,
+    term_data.weight AS weight
+  FROM term_data term_data 
+  WHERE term_data.vid in ("%d")
+  ORDER BY weight ASC
+  ',$term_id);
+  while($term = db_fetch_object($results)) {
+    $terms[] = $term->name;
+  }
+  return $terms;
+}
+
+/**
+ * print out all feeds 
+ */
+function readingroom_print_feeds() {
+  global $user;
+  $cached = cache_get('readingroom_feeds'); 
+  if ($cached && $user->uid != 0) {
+    return $cached->data;
+  }
+  else {
+    $feed_nids = readingroom_get_feed_nids();
+    foreach($feed_nids as $nids) {
+      $feeds[] = readingroom_get_feed_info($nids);
+    }
+    $result = theme('readingroom_output',$feeds);
+    cache_set('readingroom_feeds', $result, 'cache', time() + 7200);
+    return $result;
+  }
+}
+
+/**
+ * Theme the each link.
+ */
+function theme_readingroom_feed_link($title, $link, $date, $teaser) {
+   $now = time(); 
+   $toggle = '<span class="clicker closed"></span>';
+   $date = '<span class="feed-date"> ' . format_interval($now - $date)  . ' ago</span>'; 
+   $teaser = '<span class="teaser closed"> '. strip_tags($teaser, '<p><a>') . '</span>';
+   return $toggle . l($title, $link) . $date . $teaser;
+}
+
+/**
+ * Template for tabs
+ */ 
+function theme_readingroom_output($blocks = NULL, $numb_rows = 3) {
+  $feed_nids = readingroom_get_feed_nids();
+  foreach ($feed_nids as $feed_nid) {
+    $feed_items[] = readingroom_get_feed_item_nids($feed_nid);
+  }
+  foreach ($feed_items as $key => $value) {
+    foreach ($value as $feed => $feed_item) { 
+      //if there are more than 9 items, proceed!
+      $x = 9;
+      $feeds = array();
+      if (count($feed_item) > $x) {
+        foreach ($feed_item as $nid) {
+          //get the date of the feed item
+          $result = db_query("SELECT created FROM {node} WHERE nid = '%d'", $nid);
+          while ($date = db_fetch_array($result)) {
+            $feeds[$nid] = $date['created'];
+          }
+         }
+          //sort and pop off the 10 we want to keep
+          asort($feeds);
+          $i = 0;
+          while ($x > $i) {
+            array_pop($feeds);
+            $i++;
+          }
+          foreach ($feeds as $n => $f) {
+            //node_delete($n);
+          }
+      }
+    }
+  }   
+  
+  if (isset($blocks)) {
+    if (user_access('administer tabs')) {
+      $feed_add = readingroom_popup_create();
+      $tab_add = readingroom_popup_tabs();
+      $output = '<div id="feed_add">' . $feed_add . ' | ' . $tab_add . '</div>';
+    }
+    $output .= '<div id="tabs">';
+    $tabs = readingroom_get_tabs();
+    $output .= '<ul id="tabs-list">';
+    $i=1;
+    foreach ($tabs as $tab) {
+      $output .= '<li><a href="#tabs-' . $i . '">' .  $tab . '</a></li>';
+      $i++;
+    }
+    $output.='</ul>';
+    $i=1;
+    foreach($tabs as $tab) {
+      $output .= '<div class="tab" id="tabs-' . $i . '">';
+      foreach ($blocks as $key => $block) {
+        if ($block['tab'] == $tab) {
+          if (user_access('administer tabs')) {
+            $feed_link = l('[edit]','node/' . $block['nid'] . '/edit');
+          }
+          if ($block['image_path']) {
+            $image = theme('imagecache', 'feed_logo', $block['image_path'], $block['title'], $block['title'] . ' logo');
+          } 
+          else { 
+            $image =''; 
+          }   
+          $source = parse_url($block['source']);
+          $title_link = l($block['title'], 'http://' . $source['host']);
+          $tab_output[]=  '<div class="readingroom feed"><div class="feed-head">' . $image . '<h3>' . $title_link . '</h3></div>' . $feed_link .  readingroom_get_list($block['nid'],$block['number']) . '</div>';
+          $t++;
+        }
+      }
+      //reorganizing array into rows for table. the default number of rows before next is 3
+      $t=1;
+      $r=1;
+      foreach($tab_output as $key => $value) {
+        if($r > $numb_rows) {
+          $t++;
+          $r=1;
+        }
+        $rows[$t][$r]=$value;
+        $r++;
+      }
+      $output .= theme('table',$headers,$rows);
+      $tab_output = '';
+      $rows = '';
+    
+    $i++;
+    $output.='</div>';
+  }
+  $output.='</div>';
+  return $output;
+  } 
+  else {
+    return '';
+  }
+}
+
+/**
+ * Make popup for feeds.
+ */
+function readingroom_popup_create() {
+  if(user_access('administer tabs')) {
+    $output .= l("Add Feed", 'node/add/feed', array('attributes'=>array('class' => 'popups')));
+    return $output;
+  } 
+  else {
+    return ''; 
+  }
+}
+
+/**
+ * Make popup for tabs.
+ *
+ * @param tid
+ * integer
+ *
+ */
+function readingroom_popup_tabs($tid = READINGROOM_VOCAB_ID) {
+  if(user_access('administer tabs')) {
+    $output .= l("Add Tab", 'admin/content/taxonomy/' . $tid . '/add/term', array('attributes'=>array('class' => 'popups')));
+    $output .= ' | ';
+    $output .= l("Edit Tabs", 'admin/content/taxonomy/' . $tid, array('attributes'=>array('class' => 'popups')));
+    return $output;
+  } 
+  else {
+    return ''; 
+  }
+}
+
+/**
+ * Hook perm!
+ */
+
+function readingroom_perm() {
+  return array('administer tabs');
+}
+
+/**
+ * Implemenation of hook_cron().
+ * Delete any feed items for a feed that has more than 9 of them.
+ */
+function readingroom_cron() {
+  
+  $feed_nids = readingroom_get_feed_nids();
+  foreach ($feed_nids as $feed_nid) {
+    $feed_items[] = readingroom_get_feed_item_nids($feed_nid);
+  }
+  foreach ($feed_items as $key => $value) {
+    foreach ($value as $feed => $feed_item) { 
+      //if there are more than 9 items, proceed!
+      $x = 9;
+      $feeds = array();
+      if (count($feed_item) > $x) {
+        foreach ($feed_item as $nid) {
+          //get the date of the feed item
+          $result = db_query("SELECT created FROM {node} WHERE nid = '%d'", $nid);
+          while ($date = db_fetch_array($result)) {
+            $feeds[$nid] = $date['created'];
+          }
+         }
+          //sort and pop off the 10 we want to keep
+          asort($feeds);
+          $i = 0;
+          while ($x > $i) {
+            array_pop($feeds);
+            $i++;
+          }
+          foreach ($feeds as $n => $f) {
+            node_delete($n);
+          }
+      }
+    }
+  }   
+  
+}

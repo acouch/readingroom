@@ -1,0 +1,119 @@
+.readingroom.feed {
+   width: 285px;
+   float: left;
+  padding: 0 25px 20px 0;
+}
+
+#block-readingroom-readingroom .tab {
+  clear: both;
+}
+
+#block-readingroom-ac_module .ui-tabs-hide {
+     display: none !important;
+}
+
+#tabs .feed-date {
+  font-color: #888;
+  font-size: .9em;
+  font-style: italic;
+}
+
+#tabs h3 {
+  border-bottom: none;
+  font-size: 1.5em;
+}
+
+#tabs img.imagecache {
+  float: left;
+  padding: 0 5px 0 0;
+}
+
+
+#tabs .feed-head {
+  border-bottom: 1px solid #999;
+}
+
+ 
+.readingroom ul span.clicker {
+   margin:8px 5px 0 0;
+   background-position:left top;
+   background-repeat:no-repeat;
+   width: 9px;
+   height: 9px;
+   cursor: pointer;
+   display: block;
+   float: left;
+}
+
+.readingroom ul span.clicker.open {
+   background-image:url(../images/minus.png);
+}
+
+.readingroom ul span.clicker.closed {
+   background-image:url(../images/plus.png);
+}
+
+.readingroom ul span.closed.teaser {
+  display:none;
+}
+
+#block-readingroom-ac_module .feed ul li {
+  border-bottom:1px solid #F2F2F2;
+  color:#666666;
+  list-style-position:inside;
+  list-style-type:none;
+  margin-left:0;
+  padding:5px 0;
+}
+#tabs h3 {
+  border-bottom:medium none;
+  font-size:1.2em;
+  margin: 0 0 5px 0;
+  color: #555;
+}
+
+#tabs {
+  font-size: 1em;
+}
+.tab {
+  background-color: #fff;
+}
+
+#tabs .feed-date {
+  color:#666666;
+  font-size:0.75em;
+  font-style:italic;
+}
+.ui-state-default a, .ui-state-default a:link, .ui-state-default a:visited {
+  color:DarkSlateGray;
+}
+
+.readingroom.feed {
+  float:left;
+  padding:13px 25px 20px 11px;
+  width:262px;
+}
+
+#tabs table {
+border:1px solid #892A2A;
+border-collapse:collapse;
+margin: 0px 0 0;
+padding:10px;
+  background-color: #fff;
+}
+
+.ui-tabs .ui-tabs-panel {
+  padding: 0px;
+  float: left;
+}
+.ui-tabs .ui-tabs-nav li.ui-tabs-selected a {
+  background-color: #fff;
+}
+.ui-state-active a, .ui-state-active a:link, .ui-state-active a:visited {
+  color: #892A2A;
+}
+
+.ui-state-active, .ui-widget-content .ui-state-active {
+  border: 1px solid #892A2A;
+}
+
